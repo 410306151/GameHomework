@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+<style>
+#info {
+  position: absolute;
+  top: 0px;
+  width: 100%;
+  padding: 10px;
+  text-align: center;
+  color: #ffff00
+}
+
+body {
+  overflow: hidden;
+}
+</style>
+</head>
+
+<body> 
+<div id="info">Game Homework
+  <br/>Press up key to accelerate, left or right key to turn, Space key to stop the arrow</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r70/three.min.js"></script>
+<script src="https://dl.dropboxusercontent.com/u/3587259/Code/Threejs/OrbitControls.js">
+
+
+</script>
+<script src="https://jyunming-chen.github.io/tutsplus/js/KeyboardState.js"></script>
+
+<script>
+var camera, scene, renderer, controls;
+var keyboard = new KeyboardState();
+var pos, vel, force, thrust;
+var power = 10;
+var drag = 1;
+var angle = 0;
+var clock = new THREE.Clock();
+var arrow, geometry, material;
+var engine = false;
+
+init();
+animate();
+
+function init() {
+  scene = new THREE.Scene();
+
+  camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 1000);
+  camera.position.z = 500;
+  scene.add(camera);
+  ///////////////////////////////////////
+  //add an arrow model
+  geometry = new THREE.Geometry();
+  // add vertices
+  geometry.vertices.push((new THREE.Vector3(0, 3.4, 0)));
+  geometry.vertices.push((new THREE.Vector3(2.8, 0, 0)));
+  geometry.vertices.push((new THREE.Vector3(-2.8, 0, 0)));
+  geometry.vertices.push((new THREE.Vector3(0, 0, 8.8)));
+  // add faces
+  geometry.faces.push(new THREE.Face3(0, 1, 2));
+  geometry.faces.push(new THREE.Face3(0, 3, 1));
+  geometry.faces.push(new THREE.Face3(0, 2, 3));
+  geometry.faces.push(new THREE.Face3(1, 3, 2));
+  // build details
+  geometry.computeBoundingSphere();
+  geometry.computeFaceNormals();
+  geometry.computeVertexNormals();
+
+  arrow = new THREE.Object3D();
+  arrow.add(new THREE.Mesh(geometry, new THREE.MeshNormalMaterial()))
+  scene.add(arrow);
+
+  var gridXZ = new THREE.GridHelper(100, 10);
+  gridXZ.setColors(new THREE.Color(0xff0000), new THREE.Color(0xffffff));
+  scene.add(gridXZ);
+
+  renderer = new THREE.WebGLRenderer();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x888888);
+
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+  document.body.appendChild(renderer.domElement);
+  ////////////////////////////////////////////
+  pos = new THREE.Vector3();
+  vel = new THREE.Vector3();
+}
+
+function forceAnalysis() {
+  controls.update();
+  keyboard.update();
+  force = new THREE.Vector3(0, 0, 0);
+  if(keyboard.down("home")){
+	engine = !engine;
+  }
+  if(engine){
+	  if (vel.length() >= 15) {
+		if (keyboard.pressed("left")) {
+		  angle = Math.atan2(-vel.z, vel.x);
+		  thrust = new THREE.Vector3(2, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle + 1.6).multiplyScalar(power * 5);
+		  force.copy(thrust.clone());
+		}
+		if (keyboard.pressed("right")) {
+		  angle = Math.atan2(-vel.z, vel.x);
+		  thrust = new THREE.Vector3(2, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle - 1.6).multiplyScalar(power * 5);
+		  force.copy(thrust.clone());
+		}
+	  }
+	  if (keyboard.pressed("up")) { //accelerate
+		if (vel.length() <= 15) {
+		  thrust = new THREE.Vector3(2, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle).multiplyScalar(power * 5);
+		  force.add(thrust);
+		} else {
+		  force.add(vel.clone().multiplyScalar(power / 4));
+		}
+	  }
+	  if (keyboard.pressed("down")) { //decelerate
+		force.add(vel.clone().multiplyScalar(-drag));
+	  }
+	  if (keyboard.down("space")) { //stop
+		force.add(vel.clone().multiplyScalar(-drag * 55));
+	  }
+	}
+  force.add(vel.clone().multiplyScalar(-drag));
+}
+
+function animate() {
+  forceAnalysis();
+
+  //console.log(force);
+  var dt = clock.getDelta();
+  //vel=vel+force/mass*dt
+  vel.add(force.clone().multiplyScalar(dt));
+  //pos=pos+vel*dt
+  pos.add(vel.clone().multiplyScalar(dt));
+  arrow.position.copy(pos);
+  arrow.rotation.y = angle + 1.63;
+
+  controls.update();
+  keyboard.update();
+  requestAnimationFrame(animate);
+  render();
+}
+
+function render() {
+  renderer.render(scene, camera);
+}
+
+// important to add this 
+// in jsfiddle!
+window.focus();
+</script>
+</body>
+
+</html>
