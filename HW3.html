@@ -319,6 +319,7 @@ function animate() {
   sprite.position.copy(pos);
   // bounce back
   if (pos.y <= ballG) {
+  	pos.y = ballG;
     vel.y *= -0.05;
   }
   // sprite animation
