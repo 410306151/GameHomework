@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+<style>
+#info {
+  position: absolute;
+  top: 0px;
+  width: 100%;
+  padding: 10px;
+  text-align: center;
+  color: #ffff00
+}
+
+body {
+  overflow: hidden;
+}
+
+</style>
+</head>
+
+<body>
+<div id="info">Homework 5
+  <br/>Missile simulator(Not finish)</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r78/three.min.js"></script>
+<script src="https://dl.dropboxusercontent.com/u/3587259/Code/Threejs/OrbitControls.js">
+</script>
+<script src="https://jyunming-chen.github.io/tutsplus/js/KeyboardState.js"></script>
+
+<script>
+
+var camera, scene, renderer, light, controls;
+var missile;
+var pos, vel, force;
+var clock = new THREE.Clock();
+var target = new THREE.Vector3();
+var building = new THREE.Vector3(-200,30,200);
+var puck;
+var mouse = new THREE.Vector2();
+var maxSpeed = 60, maxForce = 10;
+var radius = [60, 40, 50],
+  ball_x = [-160, -106, 80],
+  ball_y = [150, 120, 100],
+  ball_z = [-140, 120, -90],
+  ball_color = ['black', 'grey', 'brown'];
+  obstacle = [];
+var touch = 0;
+var uvOffsetArray = [];
+var baseS = 0,
+  baseT = 0;
+var counter = 0;
+var sprite;
+var raycaster;
+
+init();
+animate();
+
+function buildMissile() {
+  var missile = new THREE.Object3D();
+  var normalMat = new THREE.MeshNormalMaterial();
+  var tip = new THREE.Mesh(new THREE.CylinderGeometry(0, 5, 10, 20), normalMat);
+  var body = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 20, 20), normalMat);
+  body.add(tip);
+  tip.position.y = 10 / 2 + 20 / 2;
+  body.position.y = 20 / 2;
+
+  missile.add(body);
+  missile.rotation.z = -Math.PI / 2;
+  var missileFrame = new THREE.Object3D();
+  missileFrame.add(missile);
+  return missileFrame;
+}
+
+function setUpOffsetArray() {
+  for (var i = 1; i < 4; i++) {
+    var row = [];
+    for (var j = 0; j < 8; j++)
+      row.push(new THREE.Vector2(j * 0.125, -0.25 * i));
+    uvOffsetArray.push(row);
+  }
+}
+
+function buildSprite(texMat) {
+
+  var geometry = new THREE.Geometry();
+  geometry.vertices.push(
+    new THREE.Vector3(-60, -60, 0),
+    new THREE.Vector3(60, -60, 0),
+    new THREE.Vector3(60, 60, 0),
+    new THREE.Vector3(-60, 60, 0)
+  );
+
+  var face;
+  face = new THREE.Face3(0, 1, 2);
+  geometry.faces.push(face);
+  face = new THREE.Face3(0, 2, 3);
+  geometry.faces.push(face);
+
+  // upper left corner
+  var uv0 = new THREE.Vector2(0.0, 0.75);
+  var uv1 = new THREE.Vector2(0.125, 0.75);
+  var uv2 = new THREE.Vector2(0.125, 1.0);
+  var uv3 = new THREE.Vector2(0.0, 1.0);
+
+  geometry.faceVertexUvs[0].push([uv0, uv1, uv2]);
+  geometry.faceVertexUvs[0].push([uv0, uv2, uv3]);
+
+  geometry.computeBoundingSphere();
+  geometry.computeFaceNormals();
+  geometry.computeVertexNormals();
+
+  sprite = new THREE.Mesh(geometry, texMat);
+  scene.add(sprite);
+  sprite.position.set(building.x,building.y,building.z);
+}
+
+function init() {
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 10000);
+  camera.position.z = 800;
+  camera.position.y = 100;
+  scene.add(camera);
+  light = new THREE.PointLight(0xffffff);
+  light.position.set(100, 300, 200);
+  scene.add(light);
+
+  var gridXZ = new THREE.GridHelper(300, 30, 'red', 'white');
+  //  gridXZ.setColors(new THREE.Color(0xff0000), new THREE.Color(0xffffff));
+  scene.add(gridXZ);
+  renderer = new THREE.WebGLRenderer();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x888888);
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  document.body.appendChild(renderer.domElement);
+  ////////////////////////////////////////////////////////////////////////obstacles
+  for (var a = 0; a < 3; a++) {
+    var ob = new THREE.Mesh(new THREE.SphereGeometry(radius[a], 20, 20),
+      new THREE.MeshBasicMaterial({
+        color: ball_color[a]
+      }));
+    scene.add(ob);
+    ob.position.x = ball_x[a];
+    ob.position.y = ball_y[a];
+    ob.position.z = ball_z[a];
+    obstacle.push(new THREE.Vector3(ball_x[a],ball_y[a],ball_z[a]));
+  }
+  /////////////////////////////////////////////////////////////////////////build building
+  puck = new THREE.Mesh(new THREE.CylinderGeometry(20, 20, 60), new THREE.MeshNormalMaterial());
+  scene.add(puck);
+  puck.position.set(-200, 30, 280);
+  //////////////////////////////////////////////////////////////////////////pick&place
+  plane = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshBasicMaterial({
+    visible: false
+  }));
+  scene.add(plane);
+  plane.rotation.x = -Math.PI / 2;
+  pickables = [plane];
+
+  raycaster = new THREE.Raycaster();
+  document.addEventListener('mousedown', onDocumentMouseDown, false);
+  ///////////////////////////////////////////////////////////////////////////build missile
+  missile = buildMissile();
+  pos = new THREE.Vector3();
+  vel = new THREE.Vector3(0, 1500, 0);
+  force = new THREE.Vector3();
+
+  missile.rotation.y = 0; //-Math.PI/4;
+  missile.rotation.z = Math.PI / 6;
+  missile.position.set(-280, 0, -280);
+
+  pos.copy(missile.position);
+  vel.applyEuler(missile.rotation);
+  scene.add(missile);
+  target = null; ///////////////////////////////////////////////////////////////////////////sprite animate
+  setUpOffsetArray();
+  // instantiate a loader
+  var loader = new THREE.TextureLoader();
+  // load a resource
+  loader.load(
+    'https://i.imgur.com/6ePTx6p.png',
+    function(texture) {
+      var texMat = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true, // cutout texture: set transparent: true
+        side: THREE.DoubleSide
+      });
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      buildSprite(texMat);
+    }
+  );
+}
+
+function vectorClamp(v, vMax) {
+  if (v.length() > vMax)
+    v.setLength(vMax);
+}
+
+function spriteAnimate() {
+  sprite.material.map.offset.copy(uvOffsetArray[baseS][baseT]);
+  baseT = (baseT + 1) % 8;
+  if (baseT === 0) {
+    baseS = (baseS + 1) % 4;
+  }
+}
+
+function animate() {
+  controls.update();
+  computeForce();
+  var dt = clock.getDelta();
+
+  if (touch == 1 && counter < 192) {
+    counter++;
+
+    if (counter % 8 === 0) {
+      spriteAnimate();
+    }
+  } else if (touch == 0) {
+    if (target === null) {
+      target = new THREE.Vector3(0, 1000, 0);
+    }
+    if (target !== null && pos.y > 200) {
+  target.set(building.x,building.y,building.z);
+    }
+    if (target !== null && target.distanceTo(pos) < 50) {
+      vel.set(0, 0, 0);
+      target = null;
+      force.set(0, 0, 0);
+      scene.remove(puck);
+      touch = 1;
+    }
+    if (target !== null) {
+      force = target.clone().sub(pos).setLength(maxSpeed).sub(vel);
+    }
+    //vectorClamp(force, maxForce);
+    vel.add(force.clone().multiplyScalar(dt));
+    vectorClamp(vel, maxSpeed);
+    pos.add(vel.clone().multiplyScalar(dt));
+    missile.position.copy(pos);
+    // set orientation
+    var quaternion = new THREE.Quaternion();
+    var localDir = new THREE.Vector3(1, 0, 0);
+    var angle = localDir.angleTo(vel);
+    var axis = new THREE.Vector3();
+    axis.crossVectors(localDir, vel).normalize();
+    quaternion.setFromAxisAngle(axis, angle);
+    missile.quaternion.copy(quaternion);
+  }
+  requestAnimationFrame(animate);
+  render();
+}
+
+function computeForce() {
+  // collision avoidance for each obstacle
+  for (var a = 0; a < 3; a++) {
+    var tmp = obstacle[a].clone().sub(pos);
+    var tmpProj = tmp.clone().projectOnVector(vel);
+    if (tmp.dot(vel) > 0) {
+      if (tmpProj.clone().sub(tmp).length() < radius[a] + 5) {
+        if (tmpProj.length() < 5 * vel.length()) {
+          console.log('block & close' + a);
+          force.add(tmpProj.clone().sub(tmp).multiplyScalar(2));
+        }
+      }
+    }
+  }
+}
+
+function onDocumentMouseDown(event) {
+  event.preventDefault();
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  // find intersections
+  raycaster.setFromCamera(mouse, camera);
+  var intersects = raycaster.intersectObjects(pickables);
+  if (intersects.length > 0) {
+    puck.position.copy(intersects[0].point);
+    puck.position.y=30;
+    building.set(puck.position.x, puck.position.y, puck.position.z);
+    sprite.position.set(puck.position.x, puck.position.y, puck.position.z);
+  }
+}
+
+function render() {
+  renderer.render(scene, camera);
+}
+
+</script>
+</body>
+
+</html>
