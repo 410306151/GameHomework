@@ -37,14 +37,16 @@ var total_agents = 15;
 var mass = 1;
 var clock = new THREE.Clock();
 var target = new THREE.Vector3();
-var maxSpeed = 20, maxForce = 20;
+var maxSpeed = 20,
+  maxForce = 20;
 var mouse;
 var keyboard = new KeyboardState();
 var raycaster;
 var mouse = new THREE.Vector2();
 var pickables = [];
 var pos, vel, force;
-var obsCen = [], obsRad = [];
+var obsCen = [],
+  obsRad = [];
 
 var Agent = function(mesh, initPos) {
   this.pos = new THREE.Vector3();
@@ -70,11 +72,14 @@ var Agent = function(mesh, initPos) {
       if (tmp.dot(this.vel) > 0) {
         if (tmpProj.clone().sub(tmp).length() < obsRad[a] + 3) {
           if (tmpProj.length() < 5 * this.vel.length()) {
-       	  this.force.add(tmpProj.clone().sub(tmp).multiplyScalar(2));
+            this.force.add(tmpProj.clone().sub(tmp).multiplyScalar(2));
           }
         }
       }
     }
+
+    groupSteer(this);
+
     // force clamping
     if (this.force.length() > this.maxForce)
       this.force.setLength(this.maxForce);
@@ -93,8 +98,35 @@ var Agent = function(mesh, initPos) {
       this.vel.set(0, 0, 0);
       angle = Math.random() * Math.PI * 2;
     }
-
   }
+}
+
+function groupSteer(myself) {
+  // find agents in my neighborhood
+  var nbhd = [];
+  var R = 50;
+  for (var i = 0; i < agent.length; i++) {
+    if (agent[i] === myself) {
+      continue;
+    }
+    if (myself.pos.distanceToSquared(agent[i].pos) < R * R) {
+      nbhd.push(agent[i]);
+    }
+  }
+  // find separation force ... the most important one !
+  for (var i = 0; i < nbhd.length; i++) {
+    var r = myself.pos.distanceTo(nbhd[i].pos);
+    var push = myself.pos.clone().sub(nbhd[i].pos).setLength(80 / r);
+    myself.force.add(push);
+  }
+  // find cohesion force
+  var avePos = new THREE.Vector3();
+  for (var i = 0; i < nbhd.length; i++)
+    avePos.add(nbhd[i].pos);
+  avePos.multiplyScalar(1 / nbhd.length);
+  var pull = avePos.sub(myself.pos).multiplyScalar(.5);
+  myself.force.add(pull);
+  // find alignment force
 }
 
 init();
@@ -222,18 +254,19 @@ function animate() {
     agent[a].update(dt);
     agent[a].setTarget(target);
     if (agent[a].pos.distanceTo(target) < 1.5) {
-  requestAnimationFrame(reposition);
-		}
+      requestAnimationFrame(reposition);
+    }
+    agent[a].pos.y = 0;
   }
   controls.update();
   requestAnimationFrame(animate);
   render();
 }
 
-function reposition(){
+function reposition() {
   for (var a = 0; a < total_agents; a++) {
     agent[a].pos.copy(new THREE.Vector3(Math.random() * 100 + Math.random() * (-100), 0, Math.random() * 100 + Math.random() * (-100)));
-}
+  }
 }
 
 function render() {
